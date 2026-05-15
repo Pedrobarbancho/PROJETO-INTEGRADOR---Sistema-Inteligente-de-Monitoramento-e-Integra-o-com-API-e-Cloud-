@@ -4,7 +4,6 @@
 - pedro arthur
 - gilberto alves
 - julia lopes
-- eduarda isidorio
 
 ## 📌 Descrição
 Sistema de monitoramento inteligente utilizando ESP8266, API, banco de dados e integração com Google Sheets.
