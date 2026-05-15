@@ -53,7 +53,13 @@ Conteúdo esperado:
 Descrever o teste (ex: blink)
 
 ## 📸 Evidências
-(prints aqui ou link)
+<img width="484" height="814" alt="imagem 1" src="https://github.com/user-attachments/assets/9e86d9b7-9171-43b2-9f81-b977caf06bfa" />
+<img width="530" height="353" alt="imagem 2" src="https://github.com/user-attachments/assets/229ce266-4517-4959-867a-ec9b5b7ac14e" />
+<img width="676" height="358" alt="imagem 3" src="https://github.com/user-attachments/assets/7b0a927e-c3a5-47db-8f85-f095c97c4d46" />
+<img width="674" height="419" alt="imagem 4" src="https://github.com/user-attachments/assets/6a917496-4070-46a2-b69e-3c37d583f298" />
+<img width="381" height="194" alt="imagem 5" src="https://github.com/user-attachments/assets/a24457ac-9d2f-47a2-b4c1-97784abdd937" />
+<img width="539" height="278" alt="imagem 6" src="https://github.com/user-attachments/assets/515ea4a8-ddbd-433d-9757-7f3699d353dd" />
+<img width="542" height="612" alt="imagem 7" src="https://github.com/user-attachments/assets/866b7024-6689-47d6-be19-fc500f00e9e2" />
 
 ## ⚠️ Problemas encontrados
 Descrever erros e soluções
@@ -65,8 +71,21 @@ Conteúdo esperado:
 # 🔌 Investigação das Portas
 
 ## 🌐 Fontes utilizadas
-- Link 1
-- Link 2
+- [link 1](https://embarcados.com.br/arduino-entradas-analogicas/)
+- [link 2](https://embarcados.com.br/pinos-digitais-do-arduino/)
+- [link 3](https://youtu.be/SYKx85uoBrw)
+- [link 4](https://youtu.be/yehyUmUDJXc)
+- [link 5](https://www.usinainfo.com.br/shieldsexpansores/shield-multifuncoes-hy-m302-para-arduino-)
+- [link 6](https://arduino-esp8266.readthedocs.io/en/latest/)
+- [link 7](https://docs.arduino.cc/)
+- [link 8](https://developers.google.com/apps-script?hl=pt-br)
+- [link 9](https://www.ibm.com/docs/pt-br/cics-ts/5.6.0?topic=support-internet-tcpip-http-concepts)
+- [link 10](https://learn.microsoft.com/pt-br/viva/goals/gsheets-integration)
+- [link 11](https://www.microsoft.com/pt-br/security/business/security-101/what-is-authentication)
+- [link 12](https://www.ibm.com/br-pt/think/topics/rest-apis)
+- [link 13](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Reference/Methods)
+- [link 14](https://www.ibm.com/docs/pt-br/cics-ts/5.6.0?topic=programs-clientserver-model  )
+- [link 15](https://www.dio.me/articles/o-que-sao-endpoints-e-rotas-de-uma-api)
 
 ## 🔍 Processo de investigação
 Para este projeto, utilizamos o shield **HY-M302**. Como essa placa possui periféricos integrados, a investigação foi focada em descobrir quais GPIOs do ESP8266 controlam cada componente do shield.
