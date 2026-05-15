@@ -1,4 +1,4 @@
-# 🚀 Projeto Integrador - IoT Grupo_X
+# 🚀 Projeto Integrador - IoT JEGP Corporation
 
 ## 👥 Integrantes
 - pedro arthur
@@ -69,13 +69,38 @@ Conteúdo esperado:
 - Link 2
 
 ## 🔍 Processo de investigação
-Como a equipe chegou nas respostas
+Para este projeto, utilizamos o shield **HY-M302**. Como essa placa possui periféricos integrados, a investigação foi focada em descobrir quais GPIOs do ESP8266 controlam cada componente do shield.
+
+Encontramos um guia fundamental no repositório de um usuário [snabel93](https://github.com/snabel93/Arduino-HY-M302), que forneceu a tabela de mapeamento de pinos correta para este modelo. Sem esse mapeamento, o uso de sensores como o LDR ou o LED RGB seria baseado em tentativa e erro.
+
+**O que aprendemos com a referência:**
+
+- **Pinos Ocupados:** Identificamos que os pinos **D5**, **D6**, **D7** e **D8** são geralmente usados para o LED RGB e o Buzzer no shield.
+- **Leitura Analógica:** Confirmamos que o sensor de luz (LDR) e o Termistor compartilham a entrada analógica **A0**, dependendo dos jumpers da placa.
+- **Pinos Livres:** Identificamos quais portas ainda estavam disponíveis para ex1pansão caso precisássemos conectar o Google Sheets para alertas externos.
 
 ## 📊 Tabela de resultados
-| Pino | Pode usar? | Tipo | Restrição | Justificativa |
+| PINO (Shield) | CÓDIGO (ESP8266) | PODE USAR? | TIPO | RESTRIÇÃO | JUSTIFICATIVA |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **D2** | D0 – GPIO16 | SIM | ENTRADA | NENHUMA | Funciona perfeitamente |
+| **D3** | D1 – GPIO 05 | SIM | ENTRADA | NENHUMA | Funciona perfeitamente |
+| **D4** | D2 – GPIO 04 | SIM | SAÍDA | NENHUMA | Funciona perfeitamente |
+| **D6** | D3 – GPIO 0 | NÃO RECOMENDADO | SAÍDA | BOOT | Pode afetar a inicialização do ESP8266 |
+| **D9** | D4 – GPIO 2 | SIM | SAÍDA | NENHUMA | Funciona perfeitamente |
+| **D13 & D5** | D5 – GPIO 14 | SIM | SAÍDA | NENHUMA | Funciona perfeitamente |
+| **D12** | D6 – GPIO 12 | SIM | SAÍDA | NENHUMA | Funciona perfeitamente |
+| **D10** | D7 – GPIO 13 | SIM | SAÍDA | NENHUMA | Funciona perfeitamente |
+| **D11** | D8 – GPIO 15 | SIM | SAÍDA | NENHUMA | Funciona perfeitamente |
+| **NONE** | RX – GPIO 3 | SIM | SERIAL | NENHUMA | Comunicação Serial |
+| **NONE** | TX – GPIO 1 | SIM | SERIAL | NENHUMA | Comunicação Serial |
+| **A0** | A0 – ADC0 | SIM | ANALÓGICO | NENHUMA | Funciona perfeitamente |
 
 ## 🚨 Problemas encontrados
-Descrever comportamentos inesperados
+Não tivemos problemas graves no hardware. A única observação importante foi sobre os pinos **RX** e **TX**:
+
+- **Identificação**: Notamos que esses pinos não possuem um código "D" (como D1, D2) na placa.
+- **Decisão**: Decidimos não conectar nada neles para não atrapalhar o envio do código e o uso do Monitor Serial.
+- **Conclusão**: Por serem pinos de comunicação, deixamos como **"NONE"** na tabela e focamos o uso nos outros pinos digitais que funcionaram perfeitamente.
 # 🧠 Modelagem do Sistema
 
 ## 📊 Regras definidas
