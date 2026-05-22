@@ -122,19 +122,51 @@ Não tivemos problemas graves no hardware. A única observação importante foi 
 - **Conclusão**: Por serem pinos de comunicação, deixamos como **"NONE"** na tabela e focamos o uso nos outros pinos digitais que funcionaram perfeitamente.
 # 🧠 Modelagem do Sistema
 
-## 📊 Regras definidas
-| Condição | Estado | Ação |
+## 📊 Regras Definidas
+
+O sistema opera com uma lógica de estados baseada na interação do usuário com os botões físicos e no monitoramento climático.
+
+| Condição | Estado | Ação / Comportamento |
+| :--- | :--- | :--- |
+| **Pressionar BOTAO1** | `Conectando` | Inicia conexão Wi-Fi e ativa o Servidor Web interno. |
+| **Pressionar BOTAO2** | `Desconectado` | Desliga o Wi-Fi e interrompe o envio de dados para a API. |
+| **Wi-Fi Conectado** | `Ativo` | Envia um JSON com leituras para o Python a cada 5 segundos. |
+| **Erro no Sensor DHT** | `Falha` | Retorna valor `0` para temperatura/umidade e gera log de erro. |
+| **Acesso ao IP do ESP** | `Web Server` | Renderiza uma página HTML com os dados do Laboratório SENAI. |
+| **Requisição /hora** | `Sincronia` | Sincroniza o horário do sistema com o servidor backend Python. |
+
+## 🧩 Estrutura do JSON
+
+| Campo | Descrição | Exemplo de Valor |
+| :--- | :--- | :--- |
+| `device` | Endereço MAC único da placa | `AA:BB:CC:DD:EE:FF` |
+| `temperatura` | Valor lido pelo sensor DHT11 | `25.5` |
+| `umidade` | Valor lido pelo sensor DHT11 | `60.0` |
+| `botao1` | Estado do botão de ligar | `true` ou `false` |
+| `status` | Situação de operação do ESP | `Ativo` |
 
 ## 🔄 Fluxo
-Entrada → Processamento → Decisão → Ação → API
 
-## 🧩 Variáveis
-- Temperatura
-- Umidade
-- Rotação
+1. **Entrada:** Leitura do sensor DHT11 e estado dos botões pelo ESP8266.
+2. **Processamento:** O ESP8266 monta o pacote JSON e faz a autenticação via Token.
+3. **Transmissão:** Envio via HTTP POST para a API FastAPI (Python).
+4. **Armazenamento:** O Python grava os dados no MySQL e atualiza o Google Sheets.
+5. **Saída:** Visualização via Página Web local e Planilha Cloud.
+
+## 🧩 Variáveis do Sistema
+Para garantir o monitoramento completo, o sistema trabalha com as seguintes métricas:
+- **Temperatura (°C):** Coletada via sensor DHT11 para controle climático.
+- **Umidade (%):** Monitoramento da umidade relativa do ar.
+- **Estado de Conexão:** Variável booleana que indica se o Wi-Fi e o Servidor Web estão ativos.
+- **Interação Física:** Monitoramento dos estados dos Botões 1 (D0) e 2 (D1).
+- **RSSI:** Nível de intensidade do sinal Wi-Fi para diagnóstico de rede.
 
 ## 💡 Justificativas
-Explicar decisões do grupo
+A escolha das tecnologias e da estrutura do projeto baseou-se em três pilares:
+
+1. **Confiabilidade (Redundância):** A decisão de utilizar dois bancos de dados (MySQL e SQL Server) justifica-se pela necessidade de alta disponibilidade. Caso um servidor falhe, o sistema possui suporte para continuar a operação no outro, evitando perda de dados históricos.
+2. **Segurança de Dados:** Diferente da versão inicial, a implementação de Headers com `x-token` foi essencial para simular um ambiente industrial real, onde apenas dispositivos autorizados podem enviar informações para a API.
+3. **Usabilidade (QOL):** A criação de um Servidor Web dentro do próprio ESP8266 justifica-se pela facilidade de diagnóstico. O usuário pode verificar os dados em tempo real apenas acessando o IP da placa no navegador, sem depender de ferramentas externas.
 
 ## 04_Evidencias/  
 
@@ -154,22 +186,31 @@ Arquivo sugerido:   atualizacoes.md
 Conteúdo essencial:
 # 🔁 Atualizações do Projeto
 
-## v1.0
-- Configuração inicial
+### V1.0 - Protótipo Inicial
+- **Descrição:** Primeira integração entre Arduino, API, MySQL e Planilha.
+- **Segurança:** Nenhuma segurança implementada (0% proteção).
+- **Experiência:** Falta de funções de "QOL" (Quality of Life) para o usuário.
+- **Problemas:** Erros fatais constantes, como ``HTTP Error -1``, quedas na API e conflitos de IPs.
 
-## v1.1
-- Investigação de pinos
-- Identificação de erro no pino D3
+### v2.0 Sistema Robusto
+A v2 foi uma reestruturação total para resolver a instabilidade da versão anterior e trazer profissionalismo ao sistema.
 
-## v1.2
-- Alteração de pino devido a falha
+#### Melhorias Realizadas:
+- **Interface Web:** Criação de um site interno hospedado no ESP8266 para monitoramento local.
+- **Segurança:** Implementação de autenticação via API Token para proteger os dados.
+- **Backend Aprimorado:** Terminal da API mais "bonito" e detalhado, facilitando a vida do usuário na hora de monitorar os logs.
+- **Redundância de Banco de Dados:** Agora o sistema suporta MySQL e SQL Server. Isso garante que, se um banco estiver fora do ar, o outro assume a função, mantendo o sistema online.
+- **Estabilidade HTTP:** Correção dos erros de conexão e melhor tratamento de falhas.
 
-## v2.0
-- Definição da lógica do sistema
+#### 📊 Evolução Técnica
 
----
-## 📌 Melhorias realizadas
-Descrever mudanças importantes
+Abaixo, detalhamos como os problemas críticos da Versão 1.0 foram resolvidos na Versão 2.0.
 
-## 🚨 Problemas e soluções
-Explicar erros e como foram corrigidos
+| Problema Identificado (v1.0) | Causa Provável | Solução Implementada (v2.0) | Resultado Prático |
+| :--- | :--- | :--- | :--- |
+| **Erro HTTP -1** | Falha de conexão ou timeout da rede. | Validação de `WiFi.status()` antes de cada envio e tratamento de erro. | Conexão estável e sem travamentos no código. |
+| **0% Segurança** | Dados abertos sem autenticação. | Inclusão de `x-token` no Header das requisições HTTP. | Sistema protegido contra envios externos não autorizados. |
+| **Dificuldade de Monitoração** | Logs simples e pouco informativos. | Terminal Python (FastAPI) com logs visuais e Dashboard Web no ESP. | Facilidade total para o usuário acompanhar o sistema. |
+| **Instabilidade de IPs** | IPs mudavam e o código perdia a rota. | Exibição do IP local no Serial e na página web dinâmica. | Acesso rápido ao site interno do dispositivo. |
+| **Dependência do MySQL** | Se o banco caísse, o sistema parava. | Implementação de redundância com **MySQL + SQL Server**. | Alta disponibilidade: se um banco falhar, o outro assume. |
+| **Falta de Controle Físico** | O sistema ligava sozinho sem comando. | Controle manual de conexão via **Botão 1** e **Botão 2**. | Maior controle do usuário sobre o consumo de rede e hardware. |

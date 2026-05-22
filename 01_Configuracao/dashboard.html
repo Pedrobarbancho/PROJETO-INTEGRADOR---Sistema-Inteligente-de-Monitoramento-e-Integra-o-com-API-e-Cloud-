@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IoT SENAI — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:      #0a0e14;
+      --surface: #111820;
+      --border:  #1e3048;
+      --accent:  #00d4ff;
+      --accent2: #00ff9d;
+      --warn:    #ffb347;
+      --danger:  #ff4c60;
+      --text:    #c8d8e8;
+      --muted:   #4a6a8a;
+      --mono:    'Share Tech Mono', monospace;
+      --sans:    'Barlow', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: relative;
+      z-index: 10;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .badge-perfil {
+      padding: 3px 10px;
+      border: 1px solid var(--border);
+      color: var(--accent2);
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .btn-sair {
+      background: transparent;
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      padding: 6px 14px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background .2s, color .2s;
+    }
+    .btn-sair:hover { background: var(--danger); color: var(--bg); }
+
+    /* ── MAIN ── */
+    main {
+      position: relative;
+      z-index: 1;
+      padding: 32px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    /* ── CARDS DO ARDUINO ── */
+    /* Renomeado de .sensor-* para .arduino-* para padronizar a terminologia */
+    .arduino-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .arduino-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 28px 24px;
+      position: relative;
+      animation: fadeUp .4s ease both;
+    }
+    .arduino-card:nth-child(2) { animation-delay: .08s; }
+    .arduino-card:nth-child(3) { animation-delay: .16s; }
+
+    .arduino-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .arduino-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .arduino-value {
+      font-family: var(--mono);
+      font-size: 44px;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .arduino-unit {
+      font-size: 16px;
+      color: var(--muted);
+    }
+
+    /* ── STATUS ── */
+    .info-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .info-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .dot.on  { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+    .dot.off { background: var(--danger); }
+
+    /* ── SEÇÃO ADMIN ── */
+    .admin-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 28px;
+      display: none;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .form-group label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus { border-color: var(--accent); }
+    .form-group select option { background: var(--surface); }
+
+    .btn-criar {
+      background: transparent;
+      border: 1px solid var(--accent2);
+      color: var(--accent2);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 2px;
+      padding: 10px 20px;
+      cursor: pointer;
+      text-transform: uppercase;
+      white-space: nowrap;
+      transition: background .2s, color .2s;
+    }
+    .btn-criar:hover { background: var(--accent2); color: var(--bg); }
+
+    #admin-msg {
+      margin-top: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      min-height: 16px;
+      color: var(--accent2);
+    }
+    #admin-msg.erro { color: var(--danger); }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 700px) {
+      .form-row { grid-template-columns: 1fr; }
+      main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="nav-brand">SENAI // IoT Dashboard</div>
+    <div class="nav-right">
+      <span id="nav-usuario">—</span>
+      <span class="badge-perfil" id="nav-perfil">—</span>
+      <button class="btn-sair" onclick="sair()">Sair</button>
+    </div>
+  </nav>
+
+  <main>
+    <!-- Status geral -->
+    <div class="info-row">
+      <div class="info-pill"><span class="dot" id="dot-api"></span><span id="txt-api">API...</span></div>
+      <div class="info-pill"><span class="dot" id="dot-arduino"></span><span id="txt-arduino">Arduino...</span></div>
+      <div class="info-pill" id="pill-horario" style="display:none">🕒 <span id="txt-horario">—</span></div>
+    </div>
+
+    <!-- Leituras em tempo real -->
+    <div class="section-title">// Leituras em tempo real</div>
+    <div class="arduino-grid">
+      <div class="arduino-card">
+        <div class="arduino-label">🌡️ Temperatura</div>
+        <div class="arduino-value" id="val-temp">--<span class="arduino-unit">°C</span></div>
+      </div>
+      <div class="arduino-card">
+        <div class="arduino-label">💧 Umidade</div>
+        <div class="arduino-value" id="val-umid">--<span class="arduino-unit">%</span></div>
+      </div>
+      <div class="arduino-card">
+        <div class="arduino-label">📶 Sinal Wi-Fi</div>
+        <div class="arduino-value" id="val-rssi">--<span class="arduino-unit">dBm</span></div>
+      </div>
+    </div>
+
+    <!-- Seção Admin: cadastrar usuário -->
+    <div class="admin-section" id="admin-section">
+      <div class="section-title">// Gerenciar usuários — Admin</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nome</label>
+          <input type="text" id="a-nome" placeholder="Nome completo">
+        </div>
+        <div class="form-group">
+          <label>Login</label>
+          <input type="text" id="a-login" placeholder="login">
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input type="password" id="a-senha" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label>Perfil</label>
+          <select id="a-perfil">
+            <option value="Operador">Operador</option>
+            <option value="Supervisor">Supervisor</option>
+            <option value="Admin">Admin</option>
+          </select>
+        </div>
+        <button class="btn-criar" onclick="criarUsuario()">Criar</button>
+      </div>
+      <div id="admin-msg"></div>
+    </div>
+  </main>
+
+  <script>
+    const API = 'http://127.0.0.1:5000';
+
+    /*
+     * SESSÃO
+     * Lemos os três valores salvos pelo index.html após o login.
+     * - usuario e perfil: usados para exibir na tela e controlar o que aparece
+     * - sessionToken: enviado em todo request à API como header X-Session
+     *
+     * Por que X-Session e não X-Token?
+     * X-Token é o header do Arduino — identifica o hardware.
+     * X-Session é o header do usuário humano — identifica a sessão de login.
+     * São dois mecanismos separados para dois tipos de cliente diferentes.
+     */
+    const usuario      = sessionStorage.getItem('usuario');
+    const perfil       = sessionStorage.getItem('perfil');
+    const sessionToken = sessionStorage.getItem('session_token');
+
+    // Se não tem sessão, redireciona para o login imediatamente
+    if (!usuario || !sessionToken) {
+      window.location.href = 'index.html';
+    } else {
+      document.getElementById('nav-usuario').textContent = usuario;
+      document.getElementById('nav-perfil').textContent  = perfil;
+
+      // Mostra a seção de cadastro de usuários apenas para Admin
+      // (o backend também bloqueia — isso é só para a interface ficar limpa)
+      if (perfil === 'Admin' || perfil === 'Supervisor') {
+        document.getElementById('admin-section').style.display = 'block';
+      }
+    }
+
+    function sair() {
+      sessionStorage.clear();
+      window.location.href = 'index.html';
+    }
+
+    /*
+     * ATUALIZAÇÃO EM TEMPO REAL
+     * Chama /dados_recentes a cada 3 segundos.
+     * Envia sessionToken no header X-Session — obrigatório para rotas protegidas.
+     *
+     * Antes, esse fetch não mandava nenhum header de autenticação,
+     * então a API retornava 401 a cada 3 segundos silenciosamente.
+     */
+    async function atualizar() {
+      try {
+        const r = await fetch(`${API}/dados_recentes`, {
+          headers: { 'X-Session': sessionToken }, // ← CORREÇÃO: autenticação obrigatória
+          signal: AbortSignal.timeout(3000)
+        });
+
+        // Se a sessão expirou (API reiniciou), redireciona para o login
+        if (r.status === 401) {
+          sessionStorage.clear();
+          window.location.href = 'index.html';
+          return;
+        }
+
+        const d = await r.json();
+
+        document.getElementById('dot-api').className = 'dot on';
+        document.getElementById('txt-api').textContent = 'API online';
+
+        if (d.online) {
+          document.getElementById('dot-arduino').className = 'dot on';
+          document.getElementById('txt-arduino').textContent = 'Arduino online';
+          document.getElementById('val-temp').innerHTML =
+            `${d.temperatura.toFixed(1)}<span class="arduino-unit">°C</span>`;
+          document.getElementById('val-umid').innerHTML =
+            `${d.umidade.toFixed(1)}<span class="arduino-unit">%</span>`;
+          document.getElementById('val-rssi').innerHTML =
+            `${d.rssi}<span class="arduino-unit">dBm</span>`;
+          document.getElementById('pill-horario').style.display = 'flex';
+          document.getElementById('txt-horario').textContent = d.horario;
+        } else {
+          document.getElementById('dot-arduino').className = 'dot off';
+          document.getElementById('txt-arduino').textContent = 'Aguardando Arduino...';
+        }
+      } catch {
+        document.getElementById('dot-api').className = 'dot off';
+        document.getElementById('txt-api').textContent = 'API offline';
+        document.getElementById('dot-arduino').className = 'dot';
+        document.getElementById('txt-arduino').textContent = '—';
+      }
+    }
+
+    /*
+     * CADASTRAR USUÁRIO
+     * Envia os dados do formulário para POST /cadastrar_usuario.
+     *
+     * CORREÇÃO PRINCIPAL:
+     * Antes, esse fetch mandava 'X-Token' com um valor placeholder inválido.
+     * Isso causava o erro "Sessão inválida" que aparecia no print.
+     *
+     * A rota /cadastrar_usuario é protegida por sessão (X-Session), não pelo
+     * token do Arduino (X-Token). O código antigo misturava os dois conceitos.
+     */
+    async function criarUsuario() {
+      const msg  = document.getElementById('admin-msg');
+      const body = {
+        nome:   document.getElementById('a-nome').value.trim(),
+        login:  document.getElementById('a-login').value.trim(),
+        senha:  document.getElementById('a-senha').value,
+        perfil: document.getElementById('a-perfil').value,
+      };
+
+      if (!body.nome || !body.login || !body.senha) {
+        msg.className = 'erro';
+        msg.textContent = 'Preencha todos os campos.';
+        return;
+      }
+
+      msg.className = '';
+      msg.textContent = 'Criando...';
+
+      try {
+        const r = await fetch(`${API}/cadastrar_usuario`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Session': sessionToken  // ← CORREÇÃO: era 'X-Token' com valor inválido
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(5000)
+        });
+        const d = await r.json();
+
+        if (r.ok) {
+          msg.className = '';
+          msg.textContent = `✓ ${d.mensagem}`;
+          // Limpa os campos após criar com sucesso
+          ['a-nome', 'a-login', 'a-senha'].forEach(id =>
+            document.getElementById(id).value = ''
+          );
+        } else {
+          msg.className = 'erro';
+          msg.textContent = d.detail || 'Erro ao criar usuário.';
+        }
+      } catch {
+        msg.className = 'erro';
+        msg.textContent = 'Sem resposta da API.';
+      }
+    }
+
+    atualizar();
+    setInterval(atualizar, 3000);
+  </script>
+</body>
+</html>
