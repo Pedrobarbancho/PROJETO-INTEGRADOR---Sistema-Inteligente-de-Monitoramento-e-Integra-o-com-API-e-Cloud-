@@ -187,17 +187,6 @@
   <script>
     const API = 'http://127.0.0.1:5000';
 
-    // ─── ATALHO DEV: Ctrl+Shift+L ────────────────────────────────────────────
-    // REMOVER ANTES DE APRESENTAR
-    window.addEventListener('keydown', e => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'L') {
-        document.getElementById('user').value = 'admin';
-        document.getElementById('pass').value = '123';
-        logar();
-      }
-    });
-    // ─────────────────────────────────────────────────────────────────────────
-
     async function checarAPI() {
       const dot = document.getElementById('dot');
       const txt = document.getElementById('api-txt');
@@ -237,8 +226,7 @@
 
         if (res.ok) {
           /*
-           * CORREÇÃO CRÍTICA: antes só salvava nome e perfil.
-           * O session_token é obrigatório — sem ele, nenhuma rota protegida
+           * session_token é obrigatório — sem ele, nenhuma rota protegida
            * da API funciona, porque o header X-Session fica vazio.
            *
            * Por que sessionStorage e não localStorage?
@@ -248,7 +236,7 @@
            */
           sessionStorage.setItem('usuario',       data.nome);
           sessionStorage.setItem('perfil',        data.perfil);
-          sessionStorage.setItem('session_token', data.session_token); // ← CORREÇÃO
+          sessionStorage.setItem('session_token', data.session_token);
 
           msg.className = 'ok';
           msg.textContent = `Bem-vindo, ${data.nome}!`;

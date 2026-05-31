@@ -114,7 +114,6 @@
     }
 
     /* ── CARDS DO ARDUINO ── */
-    /* Renomeado de .sensor-* para .arduino-* para padronizar a terminologia */
     .arduino-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -344,27 +343,35 @@
      * Por que X-Session e não X-Token?
      * X-Token é o header do Arduino — identifica o hardware.
      * X-Session é o header do usuário humano — identifica a sessão de login.
-     * São dois mecanismos separados para dois tipos de cliente diferentes.
      */
     const usuario      = sessionStorage.getItem('usuario');
     const perfil       = sessionStorage.getItem('perfil');
     const sessionToken = sessionStorage.getItem('session_token');
 
-    // Se não tem sessão, redireciona para o login imediatamente
     if (!usuario || !sessionToken) {
       window.location.href = 'index.html';
     } else {
       document.getElementById('nav-usuario').textContent = usuario;
       document.getElementById('nav-perfil').textContent  = perfil;
 
-      // Mostra a seção de cadastro de usuários apenas para Admin
-      // (o backend também bloqueia — isso é só para a interface ficar limpa)
       if (perfil === 'Admin' || perfil === 'Supervisor') {
         document.getElementById('admin-section').style.display = 'block';
       }
     }
 
-    function sair() {
+    async function sair() {
+      /*
+       * Chama POST /logout para invalidar o token no servidor.
+       * Mesmo se a chamada falhar (API offline), limpa o sessionStorage
+       * e redireciona — o usuário fica deslogado localmente de qualquer forma.
+       */
+      try {
+        await fetch(`${API}/logout`, {
+          method: 'POST',
+          headers: { 'X-Session': sessionToken },
+          signal: AbortSignal.timeout(2000)
+        });
+      } catch { /* silencioso — o logout local acontece de qualquer jeito */ }
       sessionStorage.clear();
       window.location.href = 'index.html';
     }
@@ -373,18 +380,14 @@
      * ATUALIZAÇÃO EM TEMPO REAL
      * Chama /dados_recentes a cada 3 segundos.
      * Envia sessionToken no header X-Session — obrigatório para rotas protegidas.
-     *
-     * Antes, esse fetch não mandava nenhum header de autenticação,
-     * então a API retornava 401 a cada 3 segundos silenciosamente.
      */
     async function atualizar() {
       try {
         const r = await fetch(`${API}/dados_recentes`, {
-          headers: { 'X-Session': sessionToken }, // ← CORREÇÃO: autenticação obrigatória
+          headers: { 'X-Session': sessionToken },
           signal: AbortSignal.timeout(3000)
         });
 
-        // Se a sessão expirou (API reiniciou), redireciona para o login
         if (r.status === 401) {
           sessionStorage.clear();
           window.location.href = 'index.html';
@@ -421,14 +424,7 @@
 
     /*
      * CADASTRAR USUÁRIO
-     * Envia os dados do formulário para POST /cadastrar_usuario.
-     *
-     * CORREÇÃO PRINCIPAL:
-     * Antes, esse fetch mandava 'X-Token' com um valor placeholder inválido.
-     * Isso causava o erro "Sessão inválida" que aparecia no print.
-     *
-     * A rota /cadastrar_usuario é protegida por sessão (X-Session), não pelo
-     * token do Arduino (X-Token). O código antigo misturava os dois conceitos.
+     * Usa X-Session (sessão do usuário humano), não X-Token (Arduino).
      */
     async function criarUsuario() {
       const msg  = document.getElementById('admin-msg');
@@ -453,7 +449,7 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Session': sessionToken  // ← CORREÇÃO: era 'X-Token' com valor inválido
+            'X-Session': sessionToken
           },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(5000)
@@ -463,7 +459,6 @@
         if (r.ok) {
           msg.className = '';
           msg.textContent = `✓ ${d.mensagem}`;
-          // Limpa os campos após criar com sucesso
           ['a-nome', 'a-login', 'a-senha'].forEach(id =>
             document.getElementById(id).value = ''
           );

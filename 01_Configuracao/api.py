@@ -1,12 +1,13 @@
 """
-API IoT - SENAI v3.1
-Correções aplicadas em relação à v3:
-  - SQL Server: suporte real a autenticação Windows (Trusted_Connection) e usuário/senha
-  - potenciometro e rotacao agora são salvos no banco
-  - ultima_conexao dos dispositivos é atualizada a cada leitura
-  - dados_recentes retorna o dispositivo com leitura mais recente (não o último inserido)
-  - cadastrar_usuario agora loga exceções para facilitar debug
-  - monitorar_conexoes tem tratamento de erro para não morrer silenciosamente
+API IoT - SENAI v3.3
+Correções e adições em relação à v3.2:
+  - CORRIGIDO: docstring solta após o yield no lifespan (virou comentário)
+  - CORRIGIDO: asyncio importado duas vezes (removida duplicata)
+  - RESTAURADO: print de confirmação quando banco conecta com sucesso
+  - ADICIONADO: registro de logs_acesso no /login (sucesso e falha)
+                Exigência da Etapa 4 — seções 4.2.1 e 4.3.1
+  - ADICIONADO: rota GET /tabela/logs_acesso (Admin apenas)
+  - ADICIONADO: IP de origem capturado nos logs de acesso
 """
 
 import os
@@ -14,17 +15,17 @@ import uuid
 import urllib
 import asyncio
 import warnings
+from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 import uvicorn
 from dotenv import load_dotenv
 
 # Google Sheets — importação opcional.
-# Se o pacote não estiver instalado, o sistema continua funcionando sem Sheets.
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
@@ -32,36 +33,24 @@ try:
 except ImportError:
     SHEETS_DISPONIVEL = False
 
-# override=True é crítico: sem ele, variáveis de ambiente já existentes no
-# Windows têm prioridade sobre o .env — causava o bug do "Access denied for root".
+# override=True garante que o .env tem prioridade sobre variáveis já definidas no Windows.
 load_dotenv(override=True)
-print("URL LIDA:", os.getenv("MYSQL_URL"))
 
 # ======================================================
 # ⚙️  MODO DO BANCO
 # ======================================================
-# Lê do .env. Se não definido, usa MySQL como padrão.
-# Valores válidos: "mysql" ou "sqlserver"
-DB_MODE = os.getenv("DB_MODE", "mysql")
-
+DB_MODE = os.getenv("DB_MODE", "mysql").strip().lower()
 
 # ======================================================
 # 🗄️  ENGINE DO BANCO
 # ======================================================
+_engine_error: str = ""
+
 def criar_engine():
     """
-    Cria a conexão com o banco de dados baseado em DB_MODE.
-
-    Para MySQL: usa a URL completa do .env (mais simples).
-    Para SQL Server: detecta automaticamente se deve usar
-      - Autenticação Windows (Trusted_Connection=yes) → sem usuário/senha no .env
-      - Autenticação SQL (usuário/senha explícitos) → com SQLSERVER_USER e SQLSERVER_PASS
-
-    Por que dois modos para SQL Server?
-    No SENAI, o SQL Server Express usa autenticação Windows — o sistema operacional
-    já autentica o usuário, então não precisa de senha. Em casa ou em produção,
-    normalmente se usa usuário/senha explícitos.
-    O código detecta qual usar baseado na presença de SQLSERVER_USER no .env.
+    Cria a conexão com o banco baseado em DB_MODE.
+    MySQL: usa MYSQL_URL do .env.
+    SQL Server: detecta autenticação Windows (sem user/pass) ou SQL (com user/pass).
     """
     if DB_MODE == "mysql":
         url = os.getenv("MYSQL_URL")
@@ -75,20 +64,12 @@ def criar_engine():
         user   = os.getenv("SQLSERVER_USER", "")
         pwd    = os.getenv("SQLSERVER_PASS", "")
 
-        # Se não tiver usuário no .env → usa autenticação Windows (modo SENAI)
-        # Se tiver usuário → usa autenticação SQL com usuário/senha
         if not user:
-            # Autenticação Windows integrada (Trusted_Connection=yes)
-            # Funciona no SENAI porque o Windows já sabe quem você é.
-            # Requer pyodbc + driver ODBC da Microsoft instalado no sistema.
-            # Para verificar os drivers disponíveis, rode:
-            #   python -c "import pyodbc; print(pyodbc.drivers())"
             conn_str = (
                 f"DRIVER={{ODBC Driver 17 for SQL Server}};"
                 f"SERVER={server};DATABASE={db};Trusted_Connection=yes;"
             )
         else:
-            # Autenticação SQL explícita com usuário e senha
             conn_str = (
                 f"DRIVER={{ODBC Driver 17 for SQL Server}};"
                 f"SERVER={server};DATABASE={db};"
@@ -110,6 +91,7 @@ try:
     print(f"✅ Banco conectado: {DB_MODE.upper()}")
 except Exception as e:
     engine = None
+    _engine_error = str(e)
     print(f"❌ Falha ao conectar banco: {e}")
 
 
@@ -117,14 +99,7 @@ except Exception as e:
 # 🔀  HELPER: SQL COMPATÍVEL COM AMBOS OS BANCOS
 # ======================================================
 def sql(mysql_q: str, ss_q: str) -> str:
-    """
-    Retorna a query correta para o banco ativo.
-    MySQL e SQL Server têm sintaxes diferentes em vários pontos:
-      - NOW()      vs  GETDATE()        (data/hora atual)
-      - LIMIT n    vs  TOP n (no SELECT)(limitar resultados)
-      - AES_ENCRYPT vs HASHBYTES        (criptografia de senhas)
-    Essa função centraliza essa escolha para não espalhar ifs pelo código.
-    """
+    """Retorna a query correta para o banco ativo (MySQL ou SQL Server)."""
     return mysql_q if DB_MODE == "mysql" else ss_q
 
 
@@ -132,7 +107,7 @@ def sql(mysql_q: str, ss_q: str) -> str:
 # 📝  QUERIES SQL
 # ======================================================
 
-# — Dispositivos (Arduino) —
+# — Dispositivos —
 Q_INSERT_DISPOSITIVO = (
     "INSERT INTO dispositivos (mac_address, local_disp) VALUES (:m, :l)"
 )
@@ -145,7 +120,6 @@ Q_UPDATE_ULTIMA_CONEXAO = sql(
 )
 
 # — Leituras —
-# Corrigido: agora inclui potenciometro e rotacao, que antes eram recebidos mas não salvos.
 Q_INSERT_LEITURA = sql(
     """INSERT INTO leituras
        (id_dispositivo, temperatura, umidade, potenciometro, rotacao, data_hora)
@@ -161,6 +135,18 @@ Q_INSERT_ALERTA = sql(
     "INSERT INTO alertas_logs (nivel, mensagem, wifi_rssi, data_hora) VALUES (:nivel, :msg, :rssi, GETDATE())"
 )
 
+# — Logs de acesso (Etapa 4 — seção 4.2.1 e 4.3.1) —
+# Registra TODA tentativa de login: sucesso (1) e falha (0).
+# sucesso é BIT no SQL Server e TINYINT(1) no MySQL — ambos aceitam 0/1 como inteiro.
+Q_INSERT_LOG_ACESSO = sql(
+    "INSERT INTO logs_acesso (login, sucesso, ip_origem, data_hora) VALUES (:login, :sucesso, :ip, NOW())",
+    "INSERT INTO logs_acesso (login, sucesso, ip_origem, data_hora) VALUES (:login, :sucesso, :ip, GETDATE())"
+)
+Q_LOGS_ACESSO = sql(
+    "SELECT login, sucesso, ip_origem, data_hora FROM logs_acesso ORDER BY data_hora DESC LIMIT :n",
+    "SELECT TOP (:n) login, sucesso, ip_origem, data_hora FROM logs_acesso ORDER BY data_hora DESC"
+)
+
 # — Usuários —
 Q_LOGIN = sql(
     "SELECT nome, perfil FROM usuario WHERE login = :login AND senha = AES_ENCRYPT(:senha, :chave)",
@@ -173,13 +159,11 @@ Q_INSERT_USUARIO = sql(
 Q_LISTAR_USUARIOS = "SELECT id, nome, login, perfil FROM usuario ORDER BY perfil, nome"
 
 # — Dashboard —
-# MySQL usa LIMIT no final; SQL Server usa TOP no início do SELECT.
 Q_LEITURAS_RECENTES = sql(
     """SELECT d.mac_address, l.temperatura, l.umidade, l.data_hora
        FROM leituras l
        JOIN dispositivos d ON l.id_dispositivo = d.id_dispositivo
-       ORDER BY l.data_hora DESC
-       LIMIT :n""",
+       ORDER BY l.data_hora DESC LIMIT :n""",
     """SELECT TOP (:n) d.mac_address, l.temperatura, l.umidade, l.data_hora
        FROM leituras l
        JOIN dispositivos d ON l.id_dispositivo = d.id_dispositivo
@@ -215,16 +199,6 @@ if SHEETS_DISPONIVEL:
 # ======================================================
 # 🔐  SISTEMA DE SESSÃO
 # ======================================================
-# Funciona assim:
-#   1. Usuário faz POST /login com login+senha
-#   2. API valida no banco, gera um UUID aleatório (session_token)
-#   3. Armazena em memória: sessoes[token] = {nome, perfil}
-#   4. Retorna o token para o frontend
-#   5. Frontend salva no sessionStorage e manda em todo request como header X-Session
-#   6. API valida o header em cada rota protegida via Depends(obter_sessao)
-#
-# Limitação conhecida e aceita: reiniciar a API apaga todas as sessões.
-# Em produção real, sessões ficam num banco ou Redis. Aqui, memória basta.
 sessoes: dict[str, dict] = {}
 
 def criar_sessao(nome: str, perfil: str) -> str:
@@ -233,22 +207,11 @@ def criar_sessao(nome: str, perfil: str) -> str:
     return token
 
 def obter_sessao(x_session: str = Header(None)) -> dict:
-    """
-    Dependência do FastAPI: valida o header X-Session e retorna os dados do usuário.
-    Usado com Depends(obter_sessao) nas rotas protegidas.
-    Se o token não existir ou for inválido, retorna 401.
-    """
     if not x_session or x_session not in sessoes:
         raise HTTPException(status_code=401, detail="Sessão inválida. Faça login novamente.")
     return sessoes[x_session]
 
 def exigir_perfil(*perfis_permitidos: str):
-    """
-    Dependência com verificação de perfil.
-    Uso: Depends(exigir_perfil("Supervisor", "Admin"))
-    Primeiro valida a sessão, depois verifica se o perfil tem permissão.
-    Se não tiver, retorna 403 (autenticado, mas sem autorização).
-    """
     def verificar(sessao: dict = Depends(obter_sessao)):
         if sessao["perfil"] not in perfis_permitidos:
             raise HTTPException(
@@ -260,13 +223,83 @@ def exigir_perfil(*perfis_permitidos: str):
 
 
 # ======================================================
+# 🛠️  HELPERS
+# ======================================================
+def salvar_alerta(nivel: str, mensagem: str, rssi: int = 0):
+    """Salva alerta no banco e no Sheets. Falha silenciosamente em ambos."""
+    agora_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    if engine:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(Q_INSERT_ALERTA), {"nivel": nivel, "msg": mensagem, "rssi": rssi})
+                conn.commit()
+        except Exception as e:
+            print(f"⚠️  Erro ao salvar alerta no banco: {e}")
+    if aba_alertas:
+        try:
+            aba_alertas.append_row([agora_str, nivel, mensagem, f"{rssi} dBm"])
+        except Exception as e:
+            print(f"⚠️  Erro ao salvar alerta no Sheets: {e}")
+
+
+def registrar_acesso(login_tentativa: str, sucesso: bool, ip: str):
+    """
+    Registra tentativa de login na tabela logs_acesso.
+    Chamada tanto em logins bem-sucedidos quanto em falhas.
+    Exigência da Etapa 4 — seções 4.2.1 (registro de acessos) e 4.3.1 (tabela de logs).
+    Falha silenciosamente para não bloquear o fluxo de login.
+    """
+    if not engine:
+        return
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text(Q_INSERT_LOG_ACESSO),
+                {"login": login_tentativa, "sucesso": 1 if sucesso else 0, "ip": ip}
+            )
+            conn.commit()
+    except Exception as e:
+        print(f"⚠️  Erro ao registrar log de acesso: {e}")
+
+
+async def monitorar_conexoes():
+    """
+    Task assíncrona que verifica a cada 5 segundos se algum Arduino parou de responder.
+    Se um dispositivo ficar mais de 30s sem contato e estava online → gera alerta.
+    O try/except interno garante que um erro pontual não mata o loop inteiro.
+    """
+    while True:
+        try:
+            agora = datetime.now()
+            for mac, info in list(ultimos_contatos.items()):
+                tempo_sem_contato = (agora - info["horario"]).total_seconds()
+                if tempo_sem_contato > 30 and info["status"] == "online":
+                    salvar_alerta("ALERTA", f"Arduino '{mac}' parou de responder!")
+                    ultimos_contatos[mac]["status"] = "offline"
+                    print(f"❌ ALERTA: Arduino {mac} offline")
+        except Exception as e:
+            print(f"⚠️ Erro no monitoramento de conexões: {e}")
+        await asyncio.sleep(5)
+
+
+# ======================================================
+# 🔁  LIFECYCLE
+# ======================================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Tudo antes do yield roda no startup
+    # Inicia o monitoramento de dispositivos em background
+    asyncio.create_task(monitorar_conexoes())
+    print("🔍 Monitoramento de conexões iniciado.")
+    yield
+    # Tudo após o yield rodaria no shutdown (nada necessário por ora)
+
+
+# ======================================================
 # 🚀  FASTAPI
 # ======================================================
-app = FastAPI(title="API IoT - SENAI", version="3.1")
+app = FastAPI(title="API IoT - SENAI", version="3.3", lifespan=lifespan)
 
-# CORS: permite que o HTML aberto diretamente no navegador (file://) chame a API.
-# allow_origins=["*"] é aceitável em rede local/escola.
-# Em produção, trocar pelo endereço real do frontend.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -274,20 +307,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_TOKEN  = os.getenv("API_TOKEN")   # usado pelo Arduino no header X-Token
-SECRET_KEY = os.getenv("SECRET_KEY_DB")  # chave AES para senhas no MySQL
+API_TOKEN  = os.getenv("API_TOKEN")
+SECRET_KEY = os.getenv("SECRET_KEY_DB")
 
-# Armazena o último contato de cada dispositivo em memória.
-# Chave: MAC address | Valor: dict com horario, temperatura, umidade, rssi, status
 ultimos_contatos: dict = {}
 
 
 # ======================================================
 # 📦  MODELOS PYDANTIC
 # ======================================================
-# Pydantic valida automaticamente o JSON recebido.
-# Se o Arduino mandar um campo com tipo errado, a API retorna 422 automaticamente.
-
 class Sensores(BaseModel):
     temperatura: float
     umidade: float
@@ -308,61 +336,18 @@ class ESPPayload(BaseModel):
     wifi_rssi: int = 0
 
 class NovoUsuario(BaseModel):
-    nome: str
-    login: str
-    senha: str
-    perfil: str
+    nome:   str = Field(min_length=1, max_length=100)
+    login:  str = Field(min_length=3, max_length=50)
+    senha:  str = Field(min_length=4, max_length=128)
+    perfil: str = Field(min_length=1, max_length=20)
 
 class LoginRequest(BaseModel):
-    login: str
-    senha: str
+    login: str = Field(min_length=1, max_length=50)
+    senha: str = Field(min_length=1, max_length=128)
 
 
 # ======================================================
-# 🛠️  HELPERS
-# ======================================================
-def salvar_alerta(nivel: str, mensagem: str, rssi: int = 0):
-    """Salva um alerta no banco e no Sheets. Falha silenciosamente em ambos."""
-    agora_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    if engine:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(Q_INSERT_ALERTA), {"nivel": nivel, "msg": mensagem, "rssi": rssi})
-                conn.commit()
-        except Exception as e:
-            print(f"⚠️  Erro ao salvar alerta no banco: {e}")
-    if aba_alertas:
-        try:
-            aba_alertas.append_row([agora_str, nivel, mensagem, f"{rssi} dBm"])
-        except Exception as e:
-            print(f"⚠️  Erro ao salvar alerta no Sheets: {e}")
-
-async def monitorar_conexoes():
-    """
-    Task assíncrona que roda em paralelo com a API.
-    A cada 5 segundos, verifica se algum Arduino parou de enviar dados.
-    Se um dispositivo ficou mais de 30s sem contato e estava online → gera alerta.
-
-    Por que try/except no loop?
-    Tasks assíncronas morrem silenciosamente se lançarem uma exceção.
-    O try/except garante que um erro pontual não mate o monitoramento inteiro.
-    """
-    while True:
-        try:
-            agora = datetime.now()
-            for mac, info in list(ultimos_contatos.items()):
-                tempo_sem_contato = (agora - info["horario"]).total_seconds()
-                if tempo_sem_contato > 30 and info["status"] == "online":
-                    salvar_alerta("ALERTA", f"Arduino '{mac}' parou de responder!")
-                    ultimos_contatos[mac]["status"] = "offline"
-                    print(f"❌ ALERTA: Arduino {mac} offline")
-        except Exception as e:
-            print(f"⚠️ Erro no monitoramento de conexões: {e}")
-        await asyncio.sleep(5)
-
-
-# ======================================================
-# 🛣️  ROTAS PÚBLICAS (sem autenticação)
+# 🛣️  ROTAS PÚBLICAS
 # ======================================================
 
 @app.get("/hora")
@@ -373,20 +358,21 @@ async def fornecer_hora():
 @app.get("/status")
 async def status_api():
     return {
-        "api": "online",
-        "banco": DB_MODE,
+        "api":             "online",
+        "banco":           DB_MODE,
         "banco_conectado": engine is not None,
+        "banco_erro":      _engine_error if engine is None else None,
         "sheets_conectado": aba_leituras is not None,
     }
 
 
 @app.post("/login")
-async def login(req: LoginRequest):
-    # ─── ATALHO DEV — REMOVER ANTES DE APRESENTAR ───────────────────────────
-    if req.login == "admin" and req.senha == "123":
-        token = criar_sessao("Desenvolvedor", "Admin")
-        return {"nome": "Desenvolvedor", "perfil": "Admin", "session_token": token}
-    # ────────────────────────────────────────────────────────────────────────
+async def login(req: LoginRequest, request: Request):
+    """
+    Autentica o usuário e registra a tentativa em logs_acesso.
+    O IP de origem é capturado para rastreabilidade (Etapa 4, seção 4.2.1).
+    """
+    ip = request.client.host if request.client else "desconhecido"
 
     if not engine:
         raise HTTPException(status_code=503, detail="Banco indisponível")
@@ -400,9 +386,13 @@ async def login(req: LoginRequest):
 
         if res:
             token = criar_sessao(res[0], res[1])
-            # Retorna nome, perfil E session_token — o frontend precisa salvar os três
+            registrar_acesso(req.login, sucesso=True, ip=ip)
+            print(f"✅ Login: '{req.login}' ({res[1]}) — IP: {ip}")
             return {"nome": res[0], "perfil": res[1], "session_token": token}
 
+        # Usuário não encontrado ou senha errada
+        registrar_acesso(req.login, sucesso=False, ip=ip)
+        print(f"⚠️  Login falhou: '{req.login}' — IP: {ip}")
         raise HTTPException(status_code=401, detail="Usuário ou senha incorretos")
 
     except HTTPException:
@@ -412,18 +402,19 @@ async def login(req: LoginRequest):
         raise HTTPException(status_code=500, detail="Erro interno ao autenticar")
 
 
+@app.post("/logout")
+async def logout(x_session: str = Header(None)):
+    if x_session and x_session in sessoes:
+        del sessoes[x_session]
+    return {"status": "deslogado"}
+
+
 # ======================================================
-# 🛣️  ROTA DO ARDUINO (protegida por API_TOKEN no header X-Token)
+# 🛣️  ROTA DO ARDUINO
 # ======================================================
 
 @app.post("/dados")
 async def receber_dados(payload: ESPPayload, x_token: str = Header(None)):
-    """
-    Recebe os dados do Arduino (ESP8266).
-    Autenticação: header X-Token com o API_TOKEN do .env.
-    Isso é separado do sistema de sessão — o Arduino não faz login,
-    ele só manda um token fixo que foi programado nele.
-    """
     if x_token != API_TOKEN:
         salvar_alerta("ERRO", f"Token inválido recebido de: {payload.device}", payload.wifi_rssi)
         raise HTTPException(status_code=401, detail="Token inválido")
@@ -444,25 +435,16 @@ async def receber_dados(payload: ESPPayload, x_token: str = Header(None)):
 
     try:
         with engine.connect() as conn:
-            # Verifica se o Arduino já está cadastrado (pela MAC address)
             res = conn.execute(text(Q_SELECT_DISPOSITIVO), {"m": mac}).fetchone()
 
             if not res:
-                # Primeiro contato desse Arduino — cadastra automaticamente
                 conn.execute(text(Q_INSERT_DISPOSITIVO), {"m": mac, "l": "Laboratorio SENAI"})
                 conn.commit()
                 res = conn.execute(text(Q_SELECT_DISPOSITIVO), {"m": mac}).fetchone()
 
             id_disp = res[0]
-
-            # Salva a leitura — agora com potenciometro e rotacao também
-            conn.execute(text(Q_INSERT_LEITURA), {
-                "id": id_disp, "t": temp, "u": umid, "pot": pot, "rot": rot
-            })
-
-            # Atualiza ultima_conexao do dispositivo — antes nunca era atualizado
+            conn.execute(text(Q_INSERT_LEITURA), {"id": id_disp, "t": temp, "u": umid, "pot": pot, "rot": rot})
             conn.execute(text(Q_UPDATE_ULTIMA_CONEXAO), {"id": id_disp})
-
             conn.commit()
             st_banco = "✅ Sucesso"
     except Exception as e:
@@ -475,11 +457,9 @@ async def receber_dados(payload: ESPPayload, x_token: str = Header(None)):
         except Exception as e:
             st_sheets = f"⚠️  {e}"
 
-    # Se o Arduino estava offline e voltou, gera alerta de retorno
     if mac in ultimos_contatos and ultimos_contatos[mac]["status"] == "offline":
         salvar_alerta("INFO", f"Arduino {mac} voltou a operar.", payload.wifi_rssi)
 
-    # Atualiza o estado em memória para o dashboard em tempo real
     ultimos_contatos[mac] = {
         "id": id_disp, "local": "Laboratorio SENAI",
         "horario": agora, "status": "online",
@@ -495,21 +475,13 @@ async def receber_dados(payload: ESPPayload, x_token: str = Header(None)):
 
 
 # ======================================================
-# 🛣️  ROTAS DO DASHBOARD (protegidas por sessão)
+# 🛣️  ROTAS DO DASHBOARD
 # ======================================================
 
 @app.get("/dados_recentes")
 async def dados_recentes(sessao: dict = Depends(obter_sessao)):
-    """
-    Retorna o dado mais recente em tempo real — usado pelos cards do dashboard.
-    Qualquer perfil logado pode acessar.
-
-    Corrigido: antes usava [-1] (último inserido no dict), agora usa max() pelo horario
-    para pegar o dado mais recente de verdade, independente da ordem de inserção.
-    """
     if not ultimos_contatos:
         return {"online": False}
-
     ultimo = max(ultimos_contatos.values(), key=lambda x: x["horario"])
     return {
         "online":      ultimo["status"] == "online",
@@ -585,25 +557,43 @@ async def tabela_dispositivos(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/tabela/logs_acesso")
+async def tabela_logs_acesso(
+    n: int = 50,
+    sessao: dict = Depends(exigir_perfil("Admin"))
+):
+    """
+    Retorna histórico de tentativas de login.
+    Acesso restrito a Admin — contém IPs e logins tentados.
+    Exigência da Etapa 4 — seção 4.2.1 (registro de acessos ao sistema).
+    """
+    if not engine:
+        raise HTTPException(status_code=503, detail="Banco indisponível")
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(Q_LOGS_ACESSO), {"n": n}).fetchall()
+        return [
+            {
+                "login":     r[0],
+                "sucesso":   bool(r[1]),
+                "ip_origem": r[2] or "—",
+                "data_hora": r[3].strftime("%d/%m/%Y %H:%M:%S")
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/cadastrar_usuario")
 async def cadastrar_usuario(
     usuario: NovoUsuario,
     sessao: dict = Depends(exigir_perfil("Supervisor", "Admin"))
 ):
-    """
-    Cria um novo usuário no sistema.
-    Supervisor pode criar Operador e Supervisor.
-    Admin pode criar qualquer perfil.
-
-    A autorização vem do header X-Session (token de sessão), não do X-Token do Arduino.
-    Isso é importante: o Arduino e o usuário humano usam mecanismos de autenticação
-    completamente separados.
-    """
     perfis_validos = {"Operador", "Supervisor", "Admin"}
     if usuario.perfil not in perfis_validos:
         raise HTTPException(status_code=400, detail=f"Perfil inválido. Use: {perfis_validos}")
 
-    # Supervisor não pode criar Admin
     if sessao["perfil"] == "Supervisor" and usuario.perfil == "Admin":
         raise HTTPException(status_code=403, detail="Supervisores não podem criar Admins.")
 
@@ -624,7 +614,7 @@ async def cadastrar_usuario(
                 agora_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 aba_usuarios.append_row([agora_str, usuario.nome, usuario.login, usuario.perfil])
             except Exception:
-                pass  # Sheets falha silenciosamente
+                pass
 
         return {
             "status": "sucesso",
@@ -632,7 +622,6 @@ async def cadastrar_usuario(
         }
 
     except Exception as e:
-        # Corrigido: antes engolia o erro sem logar. Agora imprime para debug.
         print(f"Erro ao cadastrar usuário '{usuario.login}': {e}")
         raise HTTPException(status_code=400, detail="Login já existe ou erro no banco.")
 
@@ -643,14 +632,13 @@ async def cadastrar_usuario(
 if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     print("\n" + "="*52)
-    print(f"  🚀 API IoT SENAI v3.1 — Banco: {DB_MODE.upper()}")
+    print(f"  🚀 API IoT SENAI v3.3 — Banco: {DB_MODE.upper()}")
     print("="*52 + "\n")
 
     config = uvicorn.Config(app, host="0.0.0.0", port=5000, log_level="error")
     srv    = uvicorn.Server(config)
 
     async def main():
-        asyncio.create_task(monitorar_conexoes())
         await srv.serve()
 
     try:
