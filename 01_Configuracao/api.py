@@ -878,13 +878,6 @@ async def limpar_sheets(
     # apenas admin e dev podem delatar os dados
     sessao: dict = Depends(exigir_perfil(*PERFIS_ADMIN_ACIMA))
 ):
-    """
-    Remove linhas antigas do Google Sheets.
-    - Se `aba` for informada, limpa só aquela aba.
-    - Se não, limpa todas.
-    O cabeçalho (linha 1) nunca é removido.
-    Acesso restrito a Admin e Dev.
-    """
     if not aba_leituras:
         raise HTTPException(status_code=503, detail="Google Sheets não está conectado.")
     if manter < 1:
