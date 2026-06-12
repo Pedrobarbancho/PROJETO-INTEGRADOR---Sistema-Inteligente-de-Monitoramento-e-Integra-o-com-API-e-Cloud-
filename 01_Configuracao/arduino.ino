@@ -17,7 +17,7 @@ DHT dht(DHTPIN, DHTTYPE); // define o modelo do sensor
 // --- CONFIG ---
 const char* ssid = WIFI_SSID; // nome da rede
 const char* password = WIFI_PASS; // senha da rede
-String servidor = "192.168.0.105"; // IP da maquina que esta rodado o API
+String servidor = "192.168.0.112"; // IP da maquina que esta rodado o API
 const char* apiToken = TOKEN_API; // token do API
 String localAparelho = "Laboratorio SENAI"; // local onde o arduino esta
 
@@ -127,7 +127,7 @@ void loop() {
       tempoAnterior = millis(); // Reinicia o cronômetro
     }
   }
-}
+
   // LIGAR
   // BOTAO1 serve para ligar o wifi
   if (digitalRead(BOTAO1) == LOW && !wifiAtivo) {
@@ -135,7 +135,9 @@ void loop() {
     WiFi.begin(ssid, password);
     int contador = 0;
     while (WiFi.status() != WL_CONNECTED && contador < 20) { 
-      delay(500); Serial.print("."); contador++;
+      delay(500); 
+      Serial.print("."); 
+      contador++;
     }
 
     if(WiFi.status() == WL_CONNECTED) {
@@ -148,7 +150,11 @@ void loop() {
   }
 
   // DESCONECTAR
-  //BOTAO2 serve para desligar o wifi
-  if (digitalRead(BOTAO2) == LOW && wifiAtivo)
+  // BOTAO2 serve para desligar o wifi
+  if (digitalRead(BOTAO2) == LOW && wifiAtivo) {
     WiFi.disconnect();
     wifiAtivo = false;
+    Serial.println("\n🛑 WiFi Desconectado.");
+  }
+
+}

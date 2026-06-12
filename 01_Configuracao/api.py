@@ -1,34 +1,35 @@
 # --- SISTEMA E UTILITÁRIOS ---
-import os
-import uuid
-import bcrypt
-import asyncio
-import warnings
-import urllib
-from datetime import datetime
-from contextlib import asynccontextmanager
-from dotenv import load_dotenv
+import os # serve para ler o env
+import uuid # gera IDs unicos
+import bcrypt # faz hash das senhas
+import asyncio # ela ajuda o API fica esperando a resposta de alguma coisa e vai fazer outras coisas
+import warnings # usado para suprimir avisos de deprecação no terminal
+import urllib #manipula os URLs. ajuda conectar os sql sem erros
+
+from datetime import datetime # serve mostrar a data e horas
+from contextlib import asynccontextmanager # define o que executar quando a API liga e desliga
+from dotenv import load_dotenv # Carrega variáveis do arquivo .env para o os.environ
 
 # --- GOOGLE SHEETS ---
 # Importação opcional — se não instalado, SHEETS_DISPONIVEL = False
 try:
-    import gspread
-    from oauth2client.service_account import ServiceAccountCredentials
+    import gspread # serve para ler e escrever a planilha do google
+    from oauth2client.service_account import ServiceAccountCredentials # serve para ler a chave do google cloud
     SHEETS_DISPONIVEL = True
 except ImportError:
     SHEETS_DISPONIVEL = False
 
 # --- API (FASTAPI) ---
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-import uvicorn
-from collections import deque
+from fastapi.middleware.cors import CORSMiddleware # serve colocar o dominio do site
+from pydantic import BaseModel, Field # é para definir os dados que deve vim
+import uvicorn # é o "motor" da API
+from collections import deque # é para colocar limite de mensagem no terminal
 
 # --- BANCO DE DADOS ---
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text # permite conectar no MySQL e fazer texto puros
 
-# override=True garante que o .env tem prioridade sobre variáveis já definidas no Windows.
+# override=True garante que o .env tem prioridade
 load_dotenv(override=True)
 
 # ======================================================
