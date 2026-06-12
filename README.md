@@ -35,12 +35,8 @@ Ver pasta: [05_Atualizacoes](https://github.com/Pedrobarbancho/PROJETO-INTEGRADO
 Ver pasta: [04_Evidencias](https://github.com/Pedrobarbancho/PROJETO-INTEGRADOR---Sistema-Inteligente-de-Monitoramento-e-Integra-o-com-API-e-Cloud-/tree/main/04_Evidencias)
 ---
 ## 🧠 Aprendizados
-(Preencher ao longo do projeto)
-01_Configuracao/
-Arquivo sugerido:  configuracao.md
-
-Conteúdo esperado:
-
+Ver pasta: [01_Configuracao](https://github.com/Pedrobarbancho/PROJETO-INTEGRADOR/tree/main/01_Configuracao)
+---
 # 🖥️ Configuração do Ambiente
 
 ## ⚙️ Configurações realizadas
@@ -60,13 +56,6 @@ Descrever o teste (ex: blink)
 <img width="381" height="194" alt="imagem 5" src="https://github.com/user-attachments/assets/a24457ac-9d2f-47a2-b4c1-97784abdd937" />
 <img width="539" height="278" alt="imagem 6" src="https://github.com/user-attachments/assets/515ea4a8-ddbd-433d-9757-7f3699d353dd" />
 <img width="542" height="612" alt="imagem 7" src="https://github.com/user-attachments/assets/866b7024-6689-47d6-be19-fc500f00e9e2" />
-
-## ⚠️ Problemas encontrados
-Descrever erros e soluções
-02_Investigacao_Pinos/  
-Arquivo sugerido:  investigacao.md
-
-Conteúdo esperado:
 
 # 🔌 Investigação das Portas
 
@@ -121,6 +110,46 @@ Não tivemos problemas graves no hardware. A única observação importante foi 
 - **Decisão**: Decidimos não conectar nada neles para não atrapalhar o envio do código e o uso do Monitor Serial.
 - **Conclusão**: Por serem pinos de comunicação, deixamos como **"NONE"** na tabela e focamos o uso nos outros pinos digitais que funcionaram perfeitamente.
 # 🧠 Modelagem do Sistema
+
+### 3. Configuração do Hardware (ESP8266)
+
+1. Abra o arquivo `arduino.ino` na Arduino IDE.
+2. Certifique-se de configurar as suas credenciais no arquivo de cabeçalho `config.h` (Rede WiFi e Token da API).
+3. Ajuste a variável `String servidor = "IP_DA_SUA_MAQUINA";` com o IP local do computador que está rodando a API Python.
+4. Faça o upload do código para a sua placa **NodeMCU ESP8266**.
+
+---
+
+### 4. Acesso ao Painel Web
+
+1. Abra o arquivo `index.html` em qualquer navegador moderno.
+2. Entre com uma das credenciais cadastradas pelo script de hash (Ex: login `admin`, senha `senha`).
+3. O painel mudará automaticamente para o `dashboard.html`, exibindo os gráficos, sinal de WiFi da placa e terminal de auditoria em tempo real.
+
+---
+
+### 🔒 Níveis de Acesso e Segurança
+
+O sistema implementa autenticação segura baseada em sessões com hashes **Bcrypt**. Os recursos críticos são protegidos conforme o nível do usuário:
+
+| Cargo | Permissões |
+|---|---|
+| **Dev** | Acesso total irrestrito ao banco, migrações e deleções profundas de logs de sistema. |
+| **Admin** | Permissão para visualização completa e acionamento de rotinas de higienização de planilhas. |
+| **Supervisor** | Acesso analítico completo aos logs operacionais e auditoria de tentativas de login. |
+| **Operador** | Visualização básica e exclusiva do Dashboard em tempo real (sem permissão de alteração). |
+
+---
+
+### 🗄️ Estrutura das Tabelas (Banco de Dados)
+
+| Tabela | Descrição |
+|---|---|
+| `dispositivos` | Armazena os parâmetros físicos de identificação (MAC Address) e localização das placas IoT cadastradas. |
+| `leituras` | Registro de série temporal contendo temperatura (°C), umidade (%), potenciômetro, rotações e carimbo de data/hora. |
+| `usuario` | Dados cadastrais, logins exclusivos, hashes de senhas e atribuição de cargos de acesso. |
+| `alertas_logs` | Histórico de auditoria técnica da estabilidade da rede WiFi (sinal RSSI) e avisos do sistema. |
+| `logs_acesso` | Rastreamento preventivo de segurança registrando data, IP de origem e sucesso/falha de cada tentativa de login. |
 
 ## 📊 Regras Definidas
 
