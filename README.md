@@ -35,10 +35,8 @@ Ver pasta: [05_Atualizacoes](https://github.com/Pedrobarbancho/PROJETO-INTEGRADO
 Ver pasta: [04_Evidencias](https://github.com/Pedrobarbancho/PROJETO-INTEGRADOR---Sistema-Inteligente-de-Monitoramento-e-Integra-o-com-API-e-Cloud-/tree/main/04_Evidencias)
 ---
 ## 🧠 Aprendizados
-Ver pasta: [01_Configuracao]([https://github.com/Pedrobarbancho/PROJETO-INTEGRADOR---Sistema-Inteligente-de-Monitoramento-e-Integra-o-com-API-e-Cloud-/tree/main/05_Atualizacoes](https://github.com/Pedrobarbancho/PROJETO-INTEGRADOR/tree/main/01_Configuracao))
-
-Conteúdo esperado:
-
+Ver pasta: [01_Configuracao](https://github.com/Pedrobarbancho/PROJETO-INTEGRADOR/tree/main/01_Configuracao)
+---
 # 🖥️ Configuração do Ambiente
 
 ## ⚙️ Configurações realizadas
